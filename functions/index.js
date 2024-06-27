@@ -9,31 +9,32 @@
 
 // The Cloud Functions for Firebase SDK to create Cloud Functions and triggers.
 
-import "dotenv/config"
-import https from "firebase-functions/v2/https"
+// import "dotenv/config"
+import { onRequest } from "firebase-functions/v2/https"
 import { logger } from "firebase-functions"
 import admin from "firebase-admin"
 import Razorpay from "razorpay"
 
 admin.initializeApp()
 
-const key_id = process.env.RAZORPAY_KEY_ID
-const key_secret = process.env.RAZORPAY_KEY_SECRET
-console.log(key_id, key_secret)
-
 // Create a new instance of Razorpay
 const razorpayInstance = new Razorpay({
-  key_id: "process.env.RAZORPAY_KEY_ID",
-  key_secret: "process.env.RAZORPAY_KEY_SECRET",
+  key_id: "rzp_test_uGhG8zcJwEt2zs",
+  key_secret: "vJ7BT16aWtsjWy3AnxEWJICP",
 })
 
-export const helloWorld = https.onRequest((req, res) => {
+export const helloWorld = onRequest((req, res) => {
   logger.info("Hello logs!", { structuredData: true })
-  res.send("Hello from Firebase!")
+  res.json("Hello from Firebase!")
 })
 
-export const createOrder = https.onRequest(async (req, res) => {
+export const createOrder = onRequest(async (req, res) => {
   try {
+    if (req.method !== "POST") {
+      return res
+        .status(405)
+        .json({ error: `Method ${req.method} Not Allowed!` })
+    }
     const { amount, currency, receipt } = req.body
 
     const options = {
@@ -45,17 +46,22 @@ export const createOrder = https.onRequest(async (req, res) => {
     }
 
     const order = await razorpayInstance.orders.create(options)
-    console.log("Order:", order)
 
     res.status(200).send(order)
   } catch (error) {
     console.error("Error creating Razorpay order:", error)
-    res.status(500).send({ error: "Failed to create order" })
+    res.status(500).json({ error: "Failed to create order" })
   }
 })
 
-export const verifyPayment = https.onRequest(async (req, res) => {
+export const verifyPayment = onRequest(async (req, res) => {
   try {
+    if (req.method !== "POST") {
+      return res
+        .status(405)
+        .json({ error: `Method ${req.method} Not Allowed!` })
+    }
+
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
       req.body
 
@@ -65,7 +71,7 @@ export const verifyPayment = https.onRequest(async (req, res) => {
         razorpay_payment_id,
         razorpay_signature,
       },
-      "YOUR_RAZORPAY_KEY_SECRET"
+      "vJ7BT16aWtsjWy3AnxEWJICP"
     )
 
     if (generatedSignature === razorpay_signature) {
@@ -77,24 +83,31 @@ export const verifyPayment = https.onRequest(async (req, res) => {
     }
   } catch (error) {
     console.error("Error verifying Razorpay payment:", error)
-    res.status(500).send({ error: "Failed to verify payment" })
+    res.status(500).json({ error: "Failed to verify payment" })
   }
 })
 
-export const capturePayment = https.onRequest(async (req, res) => {
+export const capturePayment = onRequest(async (req, res) => {
   try {
-    const { razorpay_payment_id } = req.body
+    if (req.method !== "POST") {
+      return res
+        .status(405)
+        .json({ error: `Method ${req.method} Not Allowed!` })
+    }
+
+    const { razorpay_payment_id, amount, currency } = req.body
 
     const payment = await razorpayInstance.payments.capture(
       razorpay_payment_id,
       {
-        amount: 100, // Amount to capture in paise
+        amount: amount * 100, // Amount to capture in paise
+        currency: currency,
       }
     )
 
     res.status(200).send(payment)
   } catch (error) {
     console.error("Error capturing Razorpay payment:", error)
-    res.status(500).send({ error: "Failed to capture payment" })
+    res.status(500).json({ error: "Failed to capture payment" })
   }
 })
