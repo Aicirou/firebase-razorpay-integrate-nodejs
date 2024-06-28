@@ -11,38 +11,80 @@
 
 // import "dotenv/config"
 import { onRequest } from "firebase-functions/v2/https"
-import { logger } from "firebase-functions"
+// import { logger } from "firebase-functions"
 import admin from "firebase-admin"
 import Razorpay from "razorpay"
+import { validatePaymentVerification } from "razorpay/dist/utils/razorpay-utils.js"
 
 admin.initializeApp()
 
+const key_id = "rzp_test_uGhG8zcJwEt2zs"
+const key_secret = "vJ7BT16aWtsjWy3AnxEWJICP"
+
 // Create a new instance of Razorpay
 const razorpayInstance = new Razorpay({
-  key_id: "rzp_test_uGhG8zcJwEt2zs",
-  key_secret: "vJ7BT16aWtsjWy3AnxEWJICP",
+  key_id: key_id,
+  key_secret: key_secret,
 })
 
-export const helloWorld = onRequest((req, res) => {
-  logger.info("Hello logs!", { structuredData: true })
-  res.json("Hello from Firebase!")
-})
+// Define your CORS configuration object
+const corsConfig = {
+  "Access-Control-Allow-Origin": "*", // Optional: Adjust according to your needs
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Max-Age": "3600", // Optional: Adjust according to your needs
+}
+
+// Helper function to apply CORS headers to the response
+function applyCorsHeaders(res) {
+  Object.keys(corsConfig).forEach((header) => {
+    res.set(header, corsConfig[header])
+  })
+}
+
+// // Example usage in a Cloud Function
+// export const helloWorld = onRequest((req, res) => {
+//   // Apply CORS headers
+//   applyCorsHeaders(res)
+
+//   // Handle preflight OPTIONS request
+//   if (req.method === "OPTIONS") {
+//     res.status(204).send("")
+//     return
+//   }
+
+//   // Handle actual request
+//   logger.info("Hello logs!", { structuredData: true })
+//   res.json("Hello from Firebase!")
+// })
 
 export const createOrder = onRequest(async (req, res) => {
   try {
+    // Apply CORS headers
+    applyCorsHeaders(res)
+
+    // Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+      res.status(204).send("")
+      return
+    }
+
     if (req.method !== "POST") {
       return res
         .status(405)
         .json({ error: `Method ${req.method} Not Allowed!` })
     }
-    const { amount, currency, receipt } = req.body
+
+    //handle the post request
+    const { amount, receipt } = req.body
 
     const options = {
       amount: amount * 100, // Amount in paise
-      currency: currency,
       receipt: receipt,
+      // Set currency to "INR" by default
+      currency: "INR",
       // Set payment_capture to 0 if you want to capture later
-      payment_capture: 0,
+      payment_capture: 1,
     }
 
     const order = await razorpayInstance.orders.create(options)
@@ -56,25 +98,31 @@ export const createOrder = onRequest(async (req, res) => {
 
 export const verifyPayment = onRequest(async (req, res) => {
   try {
+    // Apply CORS headers
+    applyCorsHeaders(res)
+
+    // Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+      res.status(204).send("")
+      return
+    }
+
     if (req.method !== "POST") {
       return res
         .status(405)
         .json({ error: `Method ${req.method} Not Allowed!` })
     }
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } =
-      req.body
+    //handle the post request
+    const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body
 
-    const generatedSignature = razorpayInstance.utils.generateSignature(
-      {
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_signature,
-      },
-      "vJ7BT16aWtsjWy3AnxEWJICP"
+    const generatedSignature = validatePaymentVerification(
+      { order_id: razorpayOrderId, payment_id: razorpayPaymentId },
+      razorpaySignature,
+      key_secret
     )
 
-    if (generatedSignature === razorpay_signature) {
+    if (generatedSignature === true) {
       // Payment is verified
       res.status(200).send({ message: "Payment verified" })
     } else {
@@ -87,27 +135,37 @@ export const verifyPayment = onRequest(async (req, res) => {
   }
 })
 
-export const capturePayment = onRequest(async (req, res) => {
-  try {
-    if (req.method !== "POST") {
-      return res
-        .status(405)
-        .json({ error: `Method ${req.method} Not Allowed!` })
-    }
+// export const capturePayment = onRequest(async (req, res) => {
+//   try {
+//     // Apply CORS headers
+//     applyCorsHeaders(res)
 
-    const { razorpay_payment_id, amount, currency } = req.body
+//     // Handle preflight OPTIONS request
+//     if (req.method === "OPTIONS") {
+//       res.status(204).send("")
+//       return
+//     }
 
-    const payment = await razorpayInstance.payments.capture(
-      razorpay_payment_id,
-      {
-        amount: amount * 100, // Amount to capture in paise
-        currency: currency,
-      }
-    )
+//     if (req.method !== "POST") {
+//       return res
+//         .status(405)
+//         .json({ error: `Method ${req.method} Not Allowed!` })
+//     }
 
-    res.status(200).send(payment)
-  } catch (error) {
-    console.error("Error capturing Razorpay payment:", error)
-    res.status(500).json({ error: "Failed to capture payment" })
-  }
-})
+//     //handle the post request
+//     const { razorpay_payment_id, amount, currency } = req.body
+
+//     const payment = await razorpayInstance.payments.capture(
+//       razorpay_payment_id,
+//       {
+//         amount: amount * 100, // Amount to capture in paise
+//         currency: currency,
+//       }
+//     )
+
+//     res.status(200).send(payment)
+//   } catch (error) {
+//     console.error("Error capturing Razorpay payment:", error)
+//     res.status(500).json({ error: "Failed to capture payment" })
+//   }
+// })
