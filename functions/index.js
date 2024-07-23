@@ -15,6 +15,7 @@ import { onRequest } from "firebase-functions/v2/https"
 import admin from "firebase-admin"
 import Razorpay from "razorpay"
 import { validatePaymentVerification } from "razorpay/dist/utils/razorpay-utils.js"
+import axios from "axios"
 
 admin.initializeApp()
 
@@ -132,6 +133,113 @@ export const verifyPayment = onRequest(async (req, res) => {
   } catch (error) {
     console.error("Error verifying Razorpay payment:", error)
     res.status(500).json({ error: "Failed to verify payment" })
+  }
+})
+
+export const notifyTripConfirmation = onRequest(async (req, res) => {
+  try {
+    // Apply CORS headers
+    applyCorsHeaders(res)
+
+    // Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+      res.status(204).send("")
+      return
+    }
+
+    if (req.method !== "POST") {
+      return res
+        .status(405)
+        .json({ error: `Method ${req.method} Not Allowed!` })
+    }
+
+    //handle the post request
+    const { userTripDetails, adminTripDetails } = req.body
+
+    if (!userTripDetails || !adminTripDetails) {
+      return res.status(405).json({ error: "Please provide the tripDetails!" })
+    }
+
+    //notify the user
+    const headers = {
+      accept: "*/*",
+      Authorization:
+        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNDkwNmJjNi01YzE0LTRiZDEtOWIxMi1kZjY4NjQzYjhmYWQiLCJ1bmlxdWVfbmFtZSI6ImFqYXkubWVlbmFAc2VuZGZhc3QuaW4iLCJuYW1laWQiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiZW1haWwiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiYXV0aF90aW1lIjoiMDcvMTkvMjAyNCAxMjoxMzozMyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMTEzODUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.FJuOy3GDl2f9tFq5hOKh9E2lv_UjimwnE_FXOMiLGPE",
+      "Content-Type": "application/json",
+    }
+
+    const userData = {
+      template_name: userTripDetails.template_name ?? "",
+      broadcast_name: userTripDetails.broadcast_name ?? "",
+      parameters: userTripDetails.parameters.map((param) => ({
+        name: Object.keys(param)[0],
+        value: Object.values(param)[0],
+      })),
+    }
+
+    const userNotification = axios.post(
+      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessage",
+      {
+        ...userData,
+      },
+      {
+        headers,
+        params: { whatsappNumber: userTripDetails.waId ?? "" },
+      }
+    )
+
+    // Function to expand receivers
+    function expandReceivers(receivers) {
+      return receivers.flatMap((receiver) => {
+        const numbers = Array.isArray(receiver.whatsappNumber)
+          ? receiver.whatsappNumber
+          : [receiver.whatsappNumber]
+
+        return numbers.map((number) => ({
+          whatsappNumber: number,
+          customParams: receiver.customParams,
+        }))
+      })
+    }
+
+    //notify the admin
+    const adminData = {
+      template_name: adminTripDetails.template_name ?? "",
+      broadcast_name: adminTripDetails.broadcast_name ?? "",
+      receivers: expandReceivers(adminTripDetails.receivers).map(
+        (receiver) => ({
+          whatsappNumber: receiver.whatsappNumber,
+          customParams: receiver.customParams.map((param) => ({
+            name: Object.keys(param)[0],
+            value: Object.values(param)[0],
+          })),
+        })
+      ),
+    }
+
+    const adminNotification = axios.post(
+      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessages",
+      {
+        ...adminData,
+      },
+      {
+        headers,
+      }
+    )
+
+    const [userResponse, adminResponse] = await Promise.all([
+      userNotification,
+      adminNotification,
+    ])
+
+    res.status(200).json({
+      message: "Notifications sent successfully",
+      userNotification: userResponse.data,
+      adminNotification: adminResponse.data,
+    })
+  } catch (error) {
+    console.error("Error sending trip confirmation notification:", error)
+    res.status(500).json({ error: "Failed to send notification" })
   }
 })
 
