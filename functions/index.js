@@ -233,13 +233,109 @@ export const notifyTripConfirmation = onRequest(async (req, res) => {
     ])
 
     res.status(200).json({
-      message: "Notifications sent successfully",
+      message: "Trip confirmation notifications sent successfully",
       userNotification: userResponse.data,
       adminNotification: adminResponse.data,
     })
   } catch (error) {
     console.error("Error sending trip confirmation notification:", error)
-    res.status(500).json({ error: "Failed to send notification" })
+    res
+      .status(500)
+      .json({ error: "Failed to send trip confirmation notification" })
+  }
+})
+
+export const notifyBookingDetails = onRequest(async (req, res) => {
+  //template_name: ["share_driverdetails_to_user", "share_details_to_driver]
+  try {
+    // Apply CORS headers
+    applyCorsHeaders(res)
+
+    // Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+      res.status(204).send("")
+      return
+    }
+
+    if (req.method !== "POST") {
+      return res
+        .status(405)
+        .json({ error: `Method ${req.method} Not Allowed!` })
+    }
+
+    //handle the post request
+    const { userBookingDetails, driverBookingDetails } = req.body
+
+    if (!userBookingDetails || !driverBookingDetails) {
+      return res
+        .status(405)
+        .json({ error: "Please provide the bookingDetails!" })
+    }
+
+    //notify the user
+    const headers = {
+      accept: "*/*",
+      Authorization:
+        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNDkwNmJjNi01YzE0LTRiZDEtOWIxMi1kZjY4NjQzYjhmYWQiLCJ1bmlxdWVfbmFtZSI6ImFqYXkubWVlbmFAc2VuZGZhc3QuaW4iLCJuYW1laWQiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiZW1haWwiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiYXV0aF90aW1lIjoiMDcvMTkvMjAyNCAxMjoxMzozMyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMTEzODUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.FJuOy3GDl2f9tFq5hOKh9E2lv_UjimwnE_FXOMiLGPE",
+      "Content-Type": "application/json",
+    }
+
+    const userData = {
+      template_name: userBookingDetails.template_name ?? "",
+      broadcast_name: userBookingDetails.broadcast_name ?? "",
+      parameters: userBookingDetails.parameters.map((param) => ({
+        name: Object.keys(param)[0],
+        value: Object.values(param)[0],
+      })),
+    }
+
+    const userNotification = axios.post(
+      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessage",
+      {
+        ...userData,
+      },
+      {
+        headers,
+        params: { whatsappNumber: userBookingDetails.waId ?? "" },
+      }
+    )
+
+    //notify the driver
+    const driverData = {
+      template_name: driverBookingDetails.template_name ?? "",
+      broadcast_name: driverBookingDetails.broadcast_name ?? "",
+      parameters: driverBookingDetails.parameters.map((param) => ({
+        name: Object.keys(param)[0],
+        value: Object.values(param)[0],
+      })),
+    }
+
+    const driverNotification = axios.post(
+      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessage",
+      {
+        ...driverData,
+      },
+      {
+        headers,
+        params: { whatsappNumber: driverBookingDetails.waId ?? "" },
+      }
+    )
+
+    const [userResponse, driverResponse] = await Promise.all([
+      userNotification,
+      driverNotification,
+    ])
+
+    res.status(200).json({
+      message: "Booking details notifications sent successfully",
+      userNotification: userResponse.data,
+      driverNotification: driverResponse.data,
+    })
+  } catch (error) {
+    console.error("Error sending booking details notification:", error)
+    res
+      .status(500)
+      .json({ error: "Failed to send booking details notification" })
   }
 })
 
