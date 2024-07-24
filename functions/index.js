@@ -232,6 +232,15 @@ export const notifyTripConfirmation = onRequest(async (req, res) => {
       adminNotification,
     ])
 
+    //check if userResponse and adminResponse are failed
+    if (!userResponse.data.result || !adminResponse.data.result) {
+      return res.status(500).json({
+        message: "Failed to send trip confirmation notifications",
+        userNotification: userResponse.data,
+        adminNotification: adminResponse.data,
+      })
+    }
+
     res.status(200).json({
       message: "Trip confirmation notifications sent successfully",
       userNotification: userResponse.data,
@@ -325,6 +334,15 @@ export const notifyBookingDetails = onRequest(async (req, res) => {
       userNotification,
       driverNotification,
     ])
+
+    //check if userResponse and driverResponse are failed
+    if (!userResponse.data.result || !driverResponse.data.result) {
+      return res.status(500).json({
+        message: "Failed to send booking details notifications",
+        userNotification: userResponse.data,
+        driverNotification: driverResponse.data,
+      })
+    }
 
     res.status(200).json({
       message: "Booking details notifications sent successfully",
