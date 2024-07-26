@@ -28,6 +28,10 @@ const razorpayInstance = new Razorpay({
   key_secret: key_secret,
 })
 
+//wati.io API to send template messages
+const sendTemplateMessagesAPI =
+  "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessages"
+
 // Define your CORS configuration object
 const corsConfig = {
   "Access-Control-Allow-Origin": "*", // Optional: Adjust according to your needs
@@ -36,10 +40,32 @@ const corsConfig = {
   "Access-Control-Max-Age": "3600", // Optional: Adjust according to your needs
 }
 
+// headers for the request
+const headers = {
+  accept: "*/*",
+  Authorization:
+    "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNDkwNmJjNi01YzE0LTRiZDEtOWIxMi1kZjY4NjQzYjhmYWQiLCJ1bmlxdWVfbmFtZSI6ImFqYXkubWVlbmFAc2VuZGZhc3QuaW4iLCJuYW1laWQiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiZW1haWwiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiYXV0aF90aW1lIjoiMDcvMTkvMjAyNCAxMjoxMzozMyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMTEzODUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.FJuOy3GDl2f9tFq5hOKh9E2lv_UjimwnE_FXOMiLGPE",
+  "Content-Type": "application/json",
+}
+
 // Helper function to apply CORS headers to the response
 function applyCorsHeaders(res) {
   Object.keys(corsConfig).forEach((header) => {
     res.set(header, corsConfig[header])
+  })
+}
+
+// Function to expand receivers
+function expandReceivers(receivers) {
+  return receivers.flatMap((receiver) => {
+    const numbers = Array.isArray(receiver.whatsappNumber)
+      ? receiver.whatsappNumber
+      : [receiver.whatsappNumber]
+
+    return numbers.map((number) => ({
+      whatsappNumber: number,
+      customParams: receiver.customParams,
+    }))
   })
 }
 
@@ -161,45 +187,16 @@ export const notifyTripConfirmation = onRequest(async (req, res) => {
     }
 
     //notify the user
-    const headers = {
-      accept: "*/*",
-      Authorization:
-        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNDkwNmJjNi01YzE0LTRiZDEtOWIxMi1kZjY4NjQzYjhmYWQiLCJ1bmlxdWVfbmFtZSI6ImFqYXkubWVlbmFAc2VuZGZhc3QuaW4iLCJuYW1laWQiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiZW1haWwiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiYXV0aF90aW1lIjoiMDcvMTkvMjAyNCAxMjoxMzozMyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMTEzODUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.FJuOy3GDl2f9tFq5hOKh9E2lv_UjimwnE_FXOMiLGPE",
-      "Content-Type": "application/json",
-    }
-
     const userData = {
       template_name: userTripDetails.template_name ?? "",
       broadcast_name: userTripDetails.broadcast_name ?? "",
-      parameters: userTripDetails.parameters.map((param) => ({
-        name: Object.keys(param)[0],
-        value: Object.values(param)[0],
+      receivers: expandReceivers(userTripDetails.receivers).map((receiver) => ({
+        whatsappNumber: receiver.whatsappNumber,
+        customParams: receiver.customParams.map((param) => ({
+          name: Object.keys(param)[0],
+          value: Object.values(param)[0],
+        })),
       })),
-    }
-
-    const userNotification = axios.post(
-      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessage",
-      {
-        ...userData,
-      },
-      {
-        headers,
-        params: { whatsappNumber: userTripDetails.waId ?? "" },
-      }
-    )
-
-    // Function to expand receivers
-    function expandReceivers(receivers) {
-      return receivers.flatMap((receiver) => {
-        const numbers = Array.isArray(receiver.whatsappNumber)
-          ? receiver.whatsappNumber
-          : [receiver.whatsappNumber]
-
-        return numbers.map((number) => ({
-          whatsappNumber: number,
-          customParams: receiver.customParams,
-        }))
-      })
     }
 
     //notify the admin
@@ -217,14 +214,16 @@ export const notifyTripConfirmation = onRequest(async (req, res) => {
       ),
     }
 
+    const userNotification = axios.post(
+      sendTemplateMessagesAPI,
+      { ...userData },
+      { headers }
+    )
+
     const adminNotification = axios.post(
-      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessages",
-      {
-        ...adminData,
-      },
-      {
-        headers,
-      }
+      sendTemplateMessagesAPI,
+      { ...adminData },
+      { headers }
     )
 
     const [userResponse, adminResponse] = await Promise.all([
@@ -282,32 +281,19 @@ export const notifyBookingDetails = onRequest(async (req, res) => {
     }
 
     //notify the user
-    const headers = {
-      accept: "*/*",
-      Authorization:
-        "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNDkwNmJjNi01YzE0LTRiZDEtOWIxMi1kZjY4NjQzYjhmYWQiLCJ1bmlxdWVfbmFtZSI6ImFqYXkubWVlbmFAc2VuZGZhc3QuaW4iLCJuYW1laWQiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiZW1haWwiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiYXV0aF90aW1lIjoiMDcvMTkvMjAyNCAxMjoxMzozMyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMTEzODUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.FJuOy3GDl2f9tFq5hOKh9E2lv_UjimwnE_FXOMiLGPE",
-      "Content-Type": "application/json",
-    }
-
     const userData = {
       template_name: userBookingDetails.template_name ?? "",
       broadcast_name: userBookingDetails.broadcast_name ?? "",
-      parameters: userBookingDetails.parameters.map((param) => ({
-        name: Object.keys(param)[0],
-        value: Object.values(param)[0],
-      })),
+      receivers: expandReceivers(userBookingDetails.receivers).map(
+        (receiver) => ({
+          whatsappNumber: receiver.whatsappNumber,
+          customParams: receiver.customParams.map((param) => ({
+            name: Object.keys(param)[0],
+            value: Object.values(param)[0],
+          })),
+        })
+      ),
     }
-
-    const userNotification = axios.post(
-      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessage",
-      {
-        ...userData,
-      },
-      {
-        headers,
-        params: { whatsappNumber: userBookingDetails.waId ?? "" },
-      }
-    )
 
     //notify the driver
     const driverData = {
@@ -319,8 +305,18 @@ export const notifyBookingDetails = onRequest(async (req, res) => {
       })),
     }
 
+    const userNotification = axios.post(
+      sendTemplateMessagesAPI,
+      {
+        ...userData,
+      },
+      {
+        headers,
+      }
+    )
+
     const driverNotification = axios.post(
-      "https://live-mt-server.wati.io/311385/api/v2/sendTemplateMessage",
+      sendTemplateMessagesAPI.slice(0, -1),
       {
         ...driverData,
       },
