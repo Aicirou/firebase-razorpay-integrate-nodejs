@@ -36,16 +36,15 @@ const sendTemplateMessagesAPI =
 const corsConfig = {
   "Access-Control-Allow-Origin": "*", // Optional: Adjust according to your needs
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, authkey",
   "Access-Control-Max-Age": "3600", // Optional: Adjust according to your needs
 }
 
 // headers for the request
 const headers = {
-  accept: "*/*",
+  "Content-Type": "application/json",
   Authorization:
     "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiIyNDkwNmJjNi01YzE0LTRiZDEtOWIxMi1kZjY4NjQzYjhmYWQiLCJ1bmlxdWVfbmFtZSI6ImFqYXkubWVlbmFAc2VuZGZhc3QuaW4iLCJuYW1laWQiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiZW1haWwiOiJhamF5Lm1lZW5hQHNlbmRmYXN0LmluIiwiYXV0aF90aW1lIjoiMDcvMTkvMjAyNCAxMjoxMzozMyIsImRiX25hbWUiOiJtdC1wcm9kLVRlbmFudHMiLCJ0ZW5hbnRfaWQiOiIzMTEzODUiLCJodHRwOi8vc2NoZW1hcy5taWNyb3NvZnQuY29tL3dzLzIwMDgvMDYvaWRlbnRpdHkvY2xhaW1zL3JvbGUiOiJBRE1JTklTVFJBVE9SIiwiZXhwIjoyNTM0MDIzMDA4MDAsImlzcyI6IkNsYXJlX0FJIiwiYXVkIjoiQ2xhcmVfQUkifQ.FJuOy3GDl2f9tFq5hOKh9E2lv_UjimwnE_FXOMiLGPE",
-  "Content-Type": "application/json",
 }
 
 // Helper function to apply CORS headers to the response
@@ -350,6 +349,84 @@ export const notifyBookingDetails = onRequest(async (req, res) => {
     res
       .status(500)
       .json({ error: "Failed to send booking details notification" })
+  }
+})
+
+export const notifyInvoiceCreation = onRequest(async (req, res) => {
+  try {
+    // Apply CORS headers
+    applyCorsHeaders(res)
+
+    // Handle preflight OPTIONS request
+    if (req.method === "OPTIONS") {
+      res.status(204).send("")
+      return
+    }
+
+    if (req.method !== "POST") {
+      return res
+        .status(405)
+        .json({ error: `Method ${req.method} Not Allowed!` })
+    }
+
+    //handle the post request
+    const {
+      name,
+      email,
+      booking_id,
+      booking_date,
+      pickup_location,
+      dropoff_location,
+      pickup_time,
+      trip_amount,
+    } = req.body
+
+    //payload for sending email
+    const payload = {
+      recipients: [
+        {
+          to: [{ name: name, email: email }],
+          variables: {
+            VAR1: name,
+            VAR2: booking_id,
+            VAR3: booking_date,
+            VAR4: pickup_location,
+            VAR5: dropoff_location,
+            VAR6: pickup_time,
+            VAR7: trip_amount,
+          },
+        },
+      ],
+      from: { name: "Trip Invoice - Teksi", email: "noreply@teksi.in" },
+      domain: "teksi.in",
+      template_id: "teksi_trip_confirm_sample",
+    }
+
+    //send email using MSG91 API
+    const response = await axios.post(
+      "http://control.msg91.com/api/v5/email/send",
+      payload,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          authkey: "321794AzjmHjH685e61f188P1",
+        },
+      }
+    )
+
+    if (response.status !== 200) {
+      return res.status(response.status).json({
+        message: "Failed to send invoice creation email",
+        response: response.data,
+      })
+    }
+
+    res.status(200).json({
+      message: "Invoice creation email sent successfully",
+      response: response.data,
+    })
+  } catch (error) {
+    console.error(error)
   }
 })
 
