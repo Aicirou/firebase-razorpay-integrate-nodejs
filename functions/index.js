@@ -15,6 +15,7 @@ import { onRequest } from "firebase-functions/v2/https"
 import admin from "firebase-admin"
 import Razorpay from "razorpay"
 import { validatePaymentVerification } from "razorpay/dist/utils/razorpay-utils.js"
+import { get } from "https"
 import axios from "axios"
 
 admin.initializeApp()
@@ -65,6 +66,39 @@ function expandReceivers(receivers) {
       whatsappNumber: number,
       customParams: receiver.customParams,
     }))
+  })
+}
+
+// Function to convert a file URL to an attachment object
+async function fileUrlToAttachment(fileUrl) {
+  return new Promise((resolve, reject) => {
+    get(fileUrl, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`Failed to fetch file: ${response.statusCode}`))
+        return
+      }
+
+      const chunks = []
+      response.on("data", (chunk) => chunks.push(chunk))
+      response.on("end", () => {
+        const buffer = Buffer.concat(chunks)
+        const base64 = buffer.toString("base64")
+        const mimeType =
+          response.headers["content-type"] || "application/octet-stream"
+        const dataURI = `data:${mimeType};base64,${base64}`
+
+        // Decode the URL and extract the filename
+        const decodedUrl = decodeURIComponent(fileUrl)
+        const fileName = decodedUrl.split("/").pop().split("?")[0]
+
+        // Create and resolve with the attachment object
+        const attachment = {
+          file: dataURI,
+          fileName: fileName,
+        }
+        resolve(attachment)
+      })
+    }).on("error", reject)
   })
 }
 
@@ -371,6 +405,7 @@ export const notifyInvoiceCreation = onRequest(async (req, res) => {
 
     //handle the post request
     const {
+      template_id,
       name,
       email,
       booking_id,
@@ -379,6 +414,7 @@ export const notifyInvoiceCreation = onRequest(async (req, res) => {
       dropoff_location,
       pickup_time,
       trip_amount,
+      fileUrl,
     } = req.body
 
     //payload for sending email
@@ -399,8 +435,19 @@ export const notifyInvoiceCreation = onRequest(async (req, res) => {
       ],
       from: { name: "Trip Invoice - Teksi", email: "noreply@teksi.in" },
       domain: "teksi.in",
-      template_id: "teksi_trip_confirm_sample",
+      template_id: template_id ?? "",
     }
+
+    //convert fileUrl to attachment, if provided and push it to the payload
+    await fileUrlToAttachment(fileUrl)
+      .then((attachment) => {
+        console.log("Attachment ready:", attachment)
+        // Now you can use this attachment in your email sending code
+        if (attachment) {
+          payload.attachments = [attachment]
+        }
+      })
+      .catch((error) => console.error("Error:", error))
 
     //send email using MSG91 API
     const response = await axios.post(
