@@ -20,8 +20,8 @@ import axios from "axios"
 
 admin.initializeApp()
 
-const key_id = "rzp_test_uGhG8zcJwEt2zs"
-const key_secret = "vJ7BT16aWtsjWy3AnxEWJICP"
+const key_id = "rzp_test_e5v6wZad1RHoL3"
+const key_secret = "OUCnI7ZgnPxLGk9Qsql7gx4x"
 
 // Create a new instance of Razorpay
 const razorpayInstance = new Razorpay({
@@ -430,10 +430,14 @@ export const notifyInvoiceCreation = onRequest(async (req, res) => {
             VAR5: dropoff_location,
             VAR6: pickup_time,
             VAR7: trip_amount,
+            VAR8: `<a href="${fileUrl}">Trip Invoice_${booking_id}.pdf</a>`,
           },
         },
       ],
-      from: { name: "Trip Invoice - Teksi", email: "noreply@teksi.in" },
+      from: {
+        email: "noreply@teksi.in",
+        name: "Teksi Team",
+      },
       domain: "teksi.in",
       template_id: template_id ?? "",
     }
